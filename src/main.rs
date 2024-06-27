@@ -41,7 +41,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let star_mesh = meshes.add(Sphere::new(1.0).mesh().build());
+    let star_mesh = meshes.add(Sphere::new(0.01).mesh().build());
     let star_mat = materials.add(StandardMaterial {
         // emissive: LinearRgba::rgb(20., 20., 20.),
         emissive: Color::rgb(20., 20., 20.),
@@ -50,17 +50,17 @@ fn setup(
 
     let mut rng = SmallRng::seed_from_u64(0xab54_397f);
 
-    for _ in 0..2500 {
+    for _ in 0..4000 {
         let pos = Vec3::new(
             rng.sample(StandardNormal),
             rng.sample(StandardNormal),
             rng.sample(StandardNormal),
-        ) * 100000.;
+        ) * 1_000_000_000.; // AU
 
         commands.spawn(MaterialMeshBundle {
             mesh: star_mesh.clone(),
             material: star_mat.clone(),
-            transform: Transform::from_translation(pos).with_scale(Vec3::splat(100.)),
+            transform: Transform::from_translation(pos).with_scale(Vec3::splat(100000000.)),
             ..default()
         });
     }
@@ -68,7 +68,7 @@ fn setup(
     commands
         .spawn((Name::new("Planet"), Planet, SpatialBundle::default()))
         .with_children(|cmd| {
-            let size = 500.0;
+            let size = 0.0010;
 
             let planet_mesh = meshes.add(Sphere::new(1.0).mesh().ico(32).unwrap());
             cmd.spawn((MaterialMeshBundle {
@@ -79,8 +79,13 @@ fn setup(
             },));
             cmd.spawn((
                 Camera3dBundle {
-                    projection: Default::default(),
-                    transform: Transform::from_xyz(0., size + 0.3, 0.),
+                    projection: Projection::Perspective(PerspectiveProjection {
+                        fov: std::f32::consts::PI / 4.,
+                        aspect_ratio: 1.,
+                        near: 0.0,
+                        far: 10000000000.0,
+                    }),
+                    transform: Transform::from_xyz(0., size + 0.00000001, 0.),
                     ..default()
                 },
                 Name::new("Camera"),
