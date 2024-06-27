@@ -1,0 +1,11 @@
+[package]
+name = "astro"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy={version="0.13", features=["dynamic_linking"]}
+rand= {version= "0.8", features=["small_rng"]}
+rand_distr="0.4"
+bevy-inspector-egui="0.24"
+
