@@ -7,6 +7,8 @@ use bevy::prelude::*;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use rand_distr::StandardNormal;
 
+const AU: f32 = 10000.;
+
 fn main() {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins);
@@ -19,6 +21,7 @@ fn main() {
         Update,
         (
             camera_controller.run_if(input_pressed(MouseButton::Right)),
+            // debug_sys,
             update_ui,
         )
             .chain(),
@@ -36,12 +39,20 @@ struct Angles(Vec2);
 #[derive(Component)]
 struct Planet;
 
+fn random_dir(rng: &mut SmallRng) -> Vec3 {
+    Vec3::new(
+        rng.sample(StandardNormal),
+        rng.sample(StandardNormal),
+        rng.sample(StandardNormal),
+    )
+}
+
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let star_mesh = meshes.add(Sphere::new(0.01).mesh().build());
+    let star_mesh = meshes.add(Sphere::new(0.01 * AU).mesh().build());
     let star_mat = materials.add(StandardMaterial {
         // emissive: LinearRgba::rgb(20., 20., 20.),
         emissive: Color::rgb(20., 20., 20.),
@@ -51,24 +62,38 @@ fn setup(
     let mut rng = SmallRng::seed_from_u64(0xab54_397f);
 
     for _ in 0..4000 {
-        let pos = Vec3::new(
-            rng.sample(StandardNormal),
-            rng.sample(StandardNormal),
-            rng.sample(StandardNormal),
-        ) * 1_000_000_000.; // AU
+        let pos = random_dir(&mut rng) * 1_000_000_000. * AU; // AU
 
         commands.spawn(MaterialMeshBundle {
             mesh: star_mesh.clone(),
             material: star_mat.clone(),
-            transform: Transform::from_translation(pos).with_scale(Vec3::splat(100000000.)),
+            transform: Transform::from_translation(pos * AU)
+                .with_scale(/*fudge brightness*/ Vec3::splat(100000000. * AU)),
             ..default()
         });
     }
 
+    commands.spawn((
+        Name::new("Sun"),
+        MaterialMeshBundle {
+            mesh: star_mesh.clone(),
+            material: star_mat.clone(),
+            transform: Transform::from_scale(Vec3::splat(10.)),
+            ..default()
+        },
+    ));
+
     commands
-        .spawn((Name::new("Planet"), Planet, SpatialBundle::default()))
+        .spawn((
+            Name::new("Planet"),
+            Planet,
+            SpatialBundle {
+                transform: Transform::from_translation(Vec3::Z * AU),
+                ..default()
+            },
+        ))
         .with_children(|cmd| {
-            let size = 0.0010;
+            let size = 1e-3 * AU; // should be -5 but it flickers :(
 
             let planet_mesh = meshes.add(Sphere::new(1.0).mesh().ico(32).unwrap());
             cmd.spawn((MaterialMeshBundle {
@@ -77,19 +102,34 @@ fn setup(
                 transform: Transform::from_scale(Vec3::splat(size)),
                 ..default()
             },));
+
             cmd.spawn((
-                Camera3dBundle {
-                    projection: Projection::Perspective(PerspectiveProjection {
-                        fov: std::f32::consts::PI / 4.,
-                        aspect_ratio: 1.,
-                        near: 0.0,
-                        far: 10000000000.0,
-                    }),
-                    transform: Transform::from_xyz(0., size + 0.00000001, 0.),
+                SpatialBundle {
+                    transform: {
+                        let mut t = Transform::from_xyz(0., size * 1.0001, 0.);
+                        t.rotate_around(
+                            Vec3::ZERO,
+                            Quat::from_axis_angle(random_dir(&mut rng).normalize(), 2.),
+                        );
+                        t
+                    },
                     ..default()
                 },
-                Name::new("Camera"),
-            ));
+                Name::new("Camera Anchor"),
+            ))
+            .with_children(|cmd| {
+                cmd.spawn(
+                    (Camera3dBundle {
+                        projection: Projection::Perspective(PerspectiveProjection {
+                            fov: std::f32::consts::PI / 4.,
+                            aspect_ratio: 1.,
+                            near: 0.0,
+                            far: 10000000000.0 * AU,
+                        }),
+                        ..default()
+                    }),
+                );
+            });
         });
 }
 
