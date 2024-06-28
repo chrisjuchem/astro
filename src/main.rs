@@ -2,6 +2,7 @@ mod ui;
 
 use crate::ui::{add_ui, update_ui};
 use bevy::input::common_conditions::input_pressed;
+use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
@@ -21,12 +22,14 @@ fn main() {
         Update,
         (
             camera_controller.run_if(input_pressed(MouseButton::Right)),
-            // debug_sys,
+            toggle_sim,
             update_ui,
         )
             .chain(),
     );
+    app.add_systems(FixedUpdate, simulation);
 
+    app.init_resource::<SimState>();
     app.init_resource::<Angles>();
     app.insert_resource(ClearColor(Color::BLACK));
 
@@ -37,7 +40,9 @@ fn main() {
 struct Angles(Vec2);
 
 #[derive(Component)]
-struct Planet;
+struct Planet {
+    axis: Vec3,
+}
 
 fn random_dir(rng: &mut SmallRng) -> Vec3 {
     Vec3::new(
@@ -86,7 +91,9 @@ fn setup(
     commands
         .spawn((
             Name::new("Planet"),
-            Planet,
+            Planet {
+                axis: Vec3::new(0.4, 0.9, 0.).normalize(),
+            },
             SpatialBundle {
                 transform: Transform::from_translation(Vec3::Z * AU),
                 ..default()
@@ -118,8 +125,8 @@ fn setup(
                 Name::new("Camera Anchor"),
             ))
             .with_children(|cmd| {
-                cmd.spawn(
-                    (Camera3dBundle {
+                cmd.spawn((
+                    Camera3dBundle {
                         projection: Projection::Perspective(PerspectiveProjection {
                             fov: std::f32::consts::PI / 4.,
                             aspect_ratio: 1.,
@@ -127,8 +134,9 @@ fn setup(
                             far: 10000000000.0 * AU,
                         }),
                         ..default()
-                    }),
-                );
+                    },
+                    Name::new("Telescope Camera"),
+                ));
             });
         });
 }
@@ -147,4 +155,30 @@ fn camera_controller(
             .max(-std::f32::consts::PI / 16.);
     }
     cams.single_mut().rotation = Quat::from_euler(EulerRot::YXZ, angles.x, angles.y, 0.);
+}
+
+#[derive(Resource, Default)]
+struct SimState {
+    rotation: bool,
+    revolution: bool,
+}
+
+fn toggle_sim(k: Res<ButtonInput<KeyCode>>, mut sim: ResMut<SimState>) {
+    if k.just_pressed(KeyCode::KeyR) {
+        sim.rotation = !sim.rotation;
+    }
+    if k.just_pressed(KeyCode::KeyE) {
+        sim.revolution = !sim.revolution;
+    }
+}
+
+fn simulation(mut planets: Query<(&mut Transform, &Planet)>, sim: Res<SimState>) {
+    for (mut t, p) in &mut planets {
+        if sim.rotation {
+            t.rotate_axis(p.axis, 0.03);
+        }
+        if sim.revolution {
+            t.translate_around(Vec3::ZERO, Quat::from_axis_angle(Vec3::Y, 0.02));
+        }
+    }
 }
