@@ -1,8 +1,10 @@
+mod sim;
 mod ui;
+mod util;
 
+use crate::sim::{simulation, toggle_sim, Now, Orbit, SimState, SimTime};
 use crate::ui::{add_ui, update_ui};
 use bevy::input::common_conditions::input_pressed;
-use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
@@ -13,7 +15,7 @@ const AU: f32 = 10000.;
 fn main() {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins);
-    // app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
+    app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
 
     app.add_systems(Startup, setup);
     app.add_systems(Startup, add_ui);
@@ -29,6 +31,8 @@ fn main() {
     );
     app.add_systems(FixedUpdate, simulation);
 
+    app.register_type::<Now>();
+    app.init_resource::<Now>();
     app.init_resource::<SimState>();
     app.init_resource::<Angles>();
     app.insert_resource(ClearColor(Color::BLACK));
@@ -73,7 +77,7 @@ fn setup(
             mesh: star_mesh.clone(),
             material: star_mat.clone(),
             transform: Transform::from_translation(pos * AU)
-                .with_scale(/*fudge brightness*/ Vec3::splat(100000000. * AU)),
+                .with_scale(/*fudge brightness*/ Vec3::splat(100_000_000. * AU)),
             ..default()
         });
     }
@@ -87,6 +91,31 @@ fn setup(
             ..default()
         },
     ));
+
+    commands
+        .spawn((
+            Name::new("Comet orbit"),
+            SpatialBundle {
+                transform: Transform::default().looking_to(random_dir(&mut rng), Vec3::Y),
+                ..default()
+            },
+        ))
+        .with_children(|cmd| {
+            cmd.spawn((
+                Name::new("Comet"),
+                MaterialMeshBundle {
+                    mesh: star_mesh.clone(),
+                    material: star_mat.clone(),
+                    transform: Transform::from_scale(Vec3::splat(3.)),
+                    ..default()
+                },
+                Orbit {
+                    ellipse: Ellipse::new(AU, 4. * AU / 3.),
+                    period: SimTime::from_secs(20),
+                    starting_offset: -1.,
+                },
+            ));
+        });
 
     commands
         .spawn((
@@ -155,30 +184,4 @@ fn camera_controller(
             .max(-std::f32::consts::PI / 16.);
     }
     cams.single_mut().rotation = Quat::from_euler(EulerRot::YXZ, angles.x, angles.y, 0.);
-}
-
-#[derive(Resource, Default)]
-struct SimState {
-    rotation: bool,
-    revolution: bool,
-}
-
-fn toggle_sim(k: Res<ButtonInput<KeyCode>>, mut sim: ResMut<SimState>) {
-    if k.just_pressed(KeyCode::KeyR) {
-        sim.rotation = !sim.rotation;
-    }
-    if k.just_pressed(KeyCode::KeyE) {
-        sim.revolution = !sim.revolution;
-    }
-}
-
-fn simulation(mut planets: Query<(&mut Transform, &Planet)>, sim: Res<SimState>) {
-    for (mut t, p) in &mut planets {
-        if sim.rotation {
-            t.rotate_axis(p.axis, 0.03);
-        }
-        if sim.revolution {
-            t.translate_around(Vec3::ZERO, Quat::from_axis_angle(Vec3::Y, 0.02));
-        }
-    }
 }
